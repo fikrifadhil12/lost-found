@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { db } from "./firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const UploadForm = ({ onItemAdded }) => {
   const navigate = useNavigate();
+  const storage = getStorage();
   const [formData, setFormData] = useState({
     name: "",
     location: "",
@@ -35,35 +39,45 @@ const UploadForm = ({ onItemAdded }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Generate ID unik
-    const newItem = {
-      id: Date.now(),
-      name: formData.name,
-      location: formData.location,
-      phone: formData.phone,
-      finderName: formData.finderName,
-      image: formData.previewImage,
-      dateFound: new Date().toLocaleDateString("id-ID"),
-    };
+    try {
+      let imageUrl = "";
+      if (formData.image) {
+        const storageRef = ref(
+          storage,
+          `items/${Date.now()}_${formData.image.name}`
+        );
+        await uploadBytes(storageRef, formData.image);
+        imageUrl = await getDownloadURL(storageRef);
+      }
 
-    // Panggil fungsi dari parent untuk menambahkan item baru
-    onItemAdded(newItem);
+      await addDoc(collection(db, "items"), {
+        name: formData.name,
+        location: formData.location,
+        phone: formData.phone,
+        finderName: formData.finderName,
+        image: imageUrl,
+        dateFound: new Date().toLocaleDateString("id-ID"),
+        createdAt: serverTimestamp(),
+      });
 
-    // Reset form
-    setFormData({
-      name: "",
-      location: "",
-      phone: "",
-      finderName: "",
-      image: null,
-      previewImage: "",
-    });
+      setFormData({
+        name: "",
+        location: "",
+        phone: "",
+        finderName: "",
+        image: null,
+        previewImage: "",
+      });
 
-    // Redirect ke halaman daftar barang
-    navigate("/search");
+      navigate("/search");
+      if (onItemAdded) onItemAdded();
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Gagal menyimpan data");
+    }
   };
 
   return (
